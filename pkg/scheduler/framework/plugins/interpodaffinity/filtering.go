@@ -402,6 +402,26 @@ func satisfyPodAffinity(state *preFilterState, nodeInfo *framework.NodeInfo) boo
 		if len(state.affinityCounts) == 0 && podMatchesAllAffinityTerms(state.podInfo.RequiredAffinityTerms, state.podInfo.Pod) {
 			return true
 		}
+
+		// 过于暴力，只做参考
+		termMatchCounts := make(map[int]int)
+		for _, pod := range nodeInfo.Pods {
+			for i, term := range state.podInfo.RequiredAffinityTerms {
+				if term.Matches(pod.Pod, nil) {
+					termMatchCounts[i]++
+				}
+			}
+		}
+		allTermsMatched := true
+		for i := range state.podInfo.RequiredAffinityTerms {
+			if termMatchCounts[i] == 0 {
+				allTermsMatched = false
+				break
+			}
+		}
+		if allTermsMatched {
+			return true
+		}
 		return false
 	}
 	return true

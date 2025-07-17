@@ -544,6 +544,81 @@ func TestRequiredAffinitySingleNode(t *testing.T) {
 			pods: []*v1.Pod{{Spec: v1.PodSpec{NodeName: "node1"}, ObjectMeta: metav1.ObjectMeta{Namespace: "subteam1.team2", Labels: podLabel}}},
 			node: &node1,
 		},
+		{
+			name: "satisfies with two required pod affinity terms, each met by a different existing pod",
+			pod: createPodWithAffinityTerms(defaultNamespace, "", nil,
+				[]v1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"label-1": "x"}},
+						TopologyKey:   "zone",
+					},
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"label-2": "x"}},
+						TopologyKey:   "zone",
+					},
+				}, nil),
+			pods: []*v1.Pod{
+				st.MakePod().Name("pod-a").Node("node1").Label("label-1", "x").Obj(),
+				st.MakePod().Name("pod-b").Node("node1").Label("label-2", "x").Obj(),
+			},
+			node: &node1,
+		},
+		{
+			name: "fails when affinity terms are satisfied by pods in different zones",
+			pod: createPodWithAffinityTerms(defaultNamespace, "", nil,
+				[]v1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"label-1": "x"}},
+						TopologyKey:   "zone",
+					},
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"label-2": "x"}},
+						TopologyKey:   "zone",
+					},
+				}, nil),
+			pods: []*v1.Pod{
+				st.MakePod().Name("pod-a").Node("node1").Label("label-1", "x").Obj(),
+				st.MakePod().Name("pod-b").Node("node2").Label("label-2", "x").Obj(),
+			},
+			node: &node1,
+			wantFilterStatus: fwk.NewStatus(
+				fwk.UnschedulableAndUnresolvable,
+				ErrReasonAffinityRulesNotMatch,
+			),
+		},
+		{
+			name: "fails when single affinity term requires multiple labels not met by one pod",
+			pod: createPodWithAffinityTerms(defaultNamespace, "", nil,
+				[]v1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"label-1": "x", "label-2": "x"}},
+						TopologyKey:   "zone",
+					},
+				}, nil),
+			pods: []*v1.Pod{
+				st.MakePod().Name("pod-a").Node("node1").Label("label-1", "x").Obj(),
+				st.MakePod().Name("pod-b").Node("node1").Label("label-2", "x").Obj(),
+			},
+			node: &node1,
+			wantFilterStatus: fwk.NewStatus(
+				fwk.UnschedulableAndUnresolvable,
+				ErrReasonAffinityRulesNotMatch,
+			),
+		},
+		{
+			name: "succeeds when a single pod matches all labels of a single affinity term",
+			pod: createPodWithAffinityTerms(defaultNamespace, "", nil,
+				[]v1.PodAffinityTerm{
+					{
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"label-1": "x", "label-2": "x"}},
+						TopologyKey:   "zone",
+					},
+				}, nil),
+			pods: []*v1.Pod{
+				st.MakePod().Name("pod-a").Node("node1").Label("label-1", "x").Label("label-2", "x").Obj(),
+			},
+			node: &node1,
+		},
 	}
 
 	for _, test := range tests {
